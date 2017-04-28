@@ -28,15 +28,14 @@ global stats count = 1733506083
 group stats count = 1787117273
 total stats = 3520623356 = 3.5 billion
 
-Total =
- diff = 3128266530 //10 times faster
+Total diff = 3128266530  //10 times faster  than global atomic
 
 id: 0 value: 1733506083 ( == global)
 id: 10 value: 1787117273 ( == group)
 
 ToCompile:
+
  g++ stats.cpp -std=c++11 -pthread -DLOCAL_ATOMIC -o fast
      This will produce fast stats with local atomic variable with a collector
  g++ stats.cpp -std=c++11 -pthread  -o slow
      This will produce slow stats with global atomic
-
