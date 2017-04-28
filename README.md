@@ -39,3 +39,42 @@ To Compile:
      This will produce fast stats with local atomic variable with a collector
  g++ stats.cpp -std=c++11 -pthread  -o slow
      This will produce slow stats with global atomic
+     
+     
+Improvement: check similar idea is implemeted 
+   http://stackoverflow.com/questions/11365351/how-to-implement-efficient-c-runtime-statistics
+struct Counter {
+    unsigned long c_;
+    unsigned long operator++ () { return ++c_; }
+    operator unsigned long () const { return c_; }
+    void reset () { unsigned long c = c_; ATOMIC_DECREMENT(c_, c); }
+    Counter (std::string name);
+};
+
+struct CounterAtomic : public Counter {
+    unsigned long operator++ () { return ATOMIC_INCREMENT(c_, 1); }
+    CounterAtomic (std::string name) : Counter(name) {}
+};
+
+struct CounterRepository {
+    typedef std::map<std::string, Counter *> MapType;
+    mutable Mutex lock_;
+    MapType map_;
+    void add (std::string n, Counter &c) {
+        ScopedLock<Mutex> sl(lock_);
+        if (map_.find(n) != map_.end()) throw n;
+        map_[n] = &c;
+    }
+    Counter & get (std::string n) const {
+        ScopedLock<Mutex> sl(lock_);
+        MapType::const_iterator i = map_.find(n);
+        if (i == map_.end()) throw n;
+        return *(i->second);
+    }
+};
+
+CounterRepository counterRepository;
+
+Counter::Counter (std::string name) {
+    counterRepository.add(name, *this);
+}
