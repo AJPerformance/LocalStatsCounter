@@ -1,5 +1,5 @@
 # LocalStatsCounter
-High performance  multithreaded local stats counter(counter in stack not in global scope) that is 10 times faster than normal gloabal atomic couters and same speed as a local variable.
+High performance  multithreaded local stats counter(counter in stack not in global scope) that is 1000% (10 times) faster than normal gloabal atomic couters and same speed as a local variable.
 
 Total threads: 5 Threads
    1) one collector thread
