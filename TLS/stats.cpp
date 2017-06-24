@@ -218,7 +218,7 @@ class ThreadStatsMapContainer : public Singleton
            statsAggr.copyAndResetStats(it->second);
            if(!it->second.isUsable())
            {
-             //lprint("%ld:%p Aggr deleting stats map\n",pthread_self(), &(it->second));
+             lprint("%ld:%p Aggr deleting stats map\n",pthread_self(), &(it->second));
               _statsMap.erase(it++);
            }
            else
@@ -231,17 +231,6 @@ class ThreadStatsMapContainer : public Singleton
         return std::move(statsAggr);
      }
       
-      __attribute__((noinline)) void del()
-      {
-        lprint("%ld in delete statsmap\n",pthread_self());
-        StatsMap* statsCntr  = _statsTLS.data();
-        if(statsCntr)
-        { 
-           statsCntr->setUnusable();
-           lprint("%ld object: %p is unusable\n" ,pthread_self(), statsCntr);
-        }
-        //std::cout<<pthread_self()<<" exiting del"<<std::endl;
-      }
       __attribute__((noinline)) StatsMap* createStats()
       {
         lprint("%ld in create statsmap\n" ,pthread_self());
@@ -278,7 +267,7 @@ class ThreadStatsMapContainer : public Singleton
       public:
           void operator ()(StatsMap* value) {
               lprint("%ld IN ThreadDestructor \n" ,pthread_self());
-              ThreadStatsMapContainer::getInstance().del();
+              value->setUnusable();
           }
       };
     protected:
@@ -336,8 +325,8 @@ void golbalStatFunc (int threadid, int id) {
   while(ready) //increment stats until it is ready 
   {
     //std::cout <<threadid<<" ready : "<<ready<<std::endl;
-    int64_t start = id*25;
-    int64_t end = start+25;
+    int64_t start = id*100;
+    int64_t end = start+100;
     for(;start<end;++start)
     {
           ThreadStatsMapContainer::i_increment(start, 1);
