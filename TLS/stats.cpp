@@ -13,6 +13,9 @@
 #include "ThreadStorage.h" 
 #include <stdio.h>      /* printf */
 #include <stdarg.h>   
+#include <sys/types.h>
+#include <sys/syscall.h>
+#include <unistd.h>
 
 /* define  LOCAL_ATOMIC to 1 if you want to test distributed local stats */
 //#define LOCAL_ATOMIC 1
@@ -46,12 +49,6 @@ class Singleton: public NCA
     Singleton() {};
   private:
 
-};
-
-enum class StatType
-{
-  GLOBAL_STATS = 1, /* global stat id, similar to uint32_t globalStat */
-  ARRAY_OF_STATS  = 2 /* collection of same stat id with different identifier, like std::vector< {id, counter} > */
 };
 
 struct State {
@@ -192,11 +189,11 @@ class StatsMap
      StatCounter& getStats(uint64_t key) { return _statsIds[key];};
      bool isUsable() const { return _usable; }
      void setUnusable() { _usable = false; }
-     std::unordered_map<uint64_t, StatCounter>& getStatsMap() { return _statsIds;}
-     const std::unordered_map<uint64_t, StatCounter>& getStatsMap() const { return _statsIds;}
+     std::map<uint64_t, StatCounter>& getStatsMap() { return _statsIds;}
+     const std::map<uint64_t, StatCounter>& getStatsMap() const { return _statsIds;}
     protected:
       bool _usable;
-      std::unordered_map<uint64_t, StatCounter> _statsIds;
+      std::map<uint64_t, StatCounter> _statsIds;
       
 };
 
@@ -218,7 +215,7 @@ class ThreadStatsMapContainer : public Singleton
            statsAggr.copyAndResetStats(it->second);
            if(!it->second.isUsable())
            {
-             lprint("%ld:%p Aggr deleting stats map\n",pthread_self(), &(it->second));
+             //lprint("%ld:%p Aggr deleting stats map\n",pthread_self(), &(it->second));
               _statsMap.erase(it++);
            }
            else
@@ -227,7 +224,7 @@ class ThreadStatsMapContainer : public Singleton
            }   
             
         }
-        //lprint("%ld returning from aggr \n",pthread_self());
+        lprint("%ld returning from aggr, size: %d \n",pthread_self(), statsAggr.getStatsMap().size());
         return std::move(statsAggr);
      }
       
@@ -266,7 +263,7 @@ class ThreadStatsMapContainer : public Singleton
       {
       public:
           void operator ()(StatsMap* value) {
-              lprint("%ld IN ThreadDestructor \n" ,pthread_self());
+              //lprint("%ld IN ThreadDestructor \n" ,pthread_self());
               value->setUnusable();
           }
       };
@@ -299,9 +296,15 @@ void collectstats()
    while(maxcount--)
    {
      /* fetch stats every 1 second */
-     std::this_thread::sleep_for(std::chrono::seconds(1));
+     //usleep(2);
+     //std::cout << syscall(SYS_gettid)<<" starting Agrregate \n";
+     auto start = std::chrono::high_resolution_clock::now();
      StatsMap stats = ThreadStatsMapContainer::getInstance().aggregate();
+     auto end = std::chrono::high_resolution_clock::now();
+     std::chrono::duration<double, std::milli> elapsed = end-start;
+     std::cout << syscall(SYS_gettid)<<" Agrregate time " << elapsed.count() << " ms\n";
      aggr+= stats;
+     std::this_thread::sleep_for(std::chrono::seconds(1));
      //aggr.print(); 
    }
    ready = false;
@@ -322,19 +325,21 @@ void golbalStatFunc (int threadid, int id) {
   int64_t count = 0; 
   while (!ready) {} // wait for the ready signal
   //lprint("%d Thread: %d started Race \n" ,pthread_self(), threadid);
+  int i = 0;
   while(ready) //increment stats until it is ready 
   {
     //std::cout <<threadid<<" ready : "<<ready<<std::endl;
-    int64_t start = id*100;
-    int64_t end = start+100;
+    int64_t start = id*1000;
+    int64_t end = start+1000;
     for(;start<end;++start)
     {
           ThreadStatsMapContainer::i_increment(start, 1);
           ++count;
     }
+    ++i;
     //std::this_thread::sleep_for(std::chrono::seconds(1));
   }
-  lprint("%d Thread: %d executed INC : %d  times \n" ,pthread_self(), threadid, count);
+  //lprint("%d Thread: %d executed INC : %d  times \n" ,pthread_self(), threadid, count);
    static  std::mutex _gmtx;
    std::lock_guard<std::mutex> lck (_gmtx);
    globalCount += count;
@@ -345,16 +350,17 @@ int main ()
 {
   //lprint("pawning global threads \n" ,);
   std::vector<std::thread> globalStatsThreads;
+  //start collector thread
+  std::thread collector (collectstats);
   //for (int i=1; i<=2; ++i) globalStatsThreads.push_back(std::thread(golbalStatFunc,i, i%2));
   for (int i=0; i<4; ++i) globalStatsThreads.push_back(std::thread(golbalStatFunc,i, i));//last param is statid
 
-  //start collector thread
-  std::thread collector (collectstats);
 
   std::this_thread::sleep_for(std::chrono::seconds(1));
   auto start = std::chrono::high_resolution_clock::now();
   ready = true; //lets start the race
 
+  std::cout<<" waiting for join thread\n";
   //wait for all gloabl threads
   for (auto& th : globalStatsThreads) { th.join(); } 
   //std::cout << "completed global join  \n";
