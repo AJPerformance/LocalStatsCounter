@@ -1,4 +1,7 @@
-#include <thread> 
+#include <iostream>
+#include <functional>
+#include <atomic>
+#include <thread>
 #include <vector>
 #include <time.h>
 #include <chrono>
@@ -58,14 +61,14 @@ void increment_tl (int id) {
         counter += tlcounter;
 }
 
-int func (void fptr(int))
+int func (std::function<void(int)> func )
 {
         ready = false;
         counter = 0;
         std::vector<std::thread> threads;
         //std::cout << "spawning 10 threads...\n";
         auto start = std::chrono::high_resolution_clock::now();
-        for (int i=1; i<=10; ++i) threads.push_back(std::thread((*fptr),i));
+        for (int i=1; i<=10; ++i) threads.push_back(std::thread(func, i));
         ready = true;
         for (auto& th : threads) th.join();
 
@@ -79,12 +82,14 @@ int func (void fptr(int))
 
 int main ()
 {
+
+  std::function<void(int)> f_func = increment_l;
    std::cout << "Local =========== " ;
-   func(increment_l);
+   func(f_func);
    std::cout << "Thread Local =========== " ;
    func(increment_tl);
    std::cout << "Atomic =========== " ;
    func(increment_a);
-  
    return 0;
 }
+
